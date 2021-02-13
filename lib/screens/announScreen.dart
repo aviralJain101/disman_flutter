@@ -1,8 +1,8 @@
-import 'package:disman/constants/websocketUrl.dart';
 import 'package:flutter/material.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
-//import 'package:geolocator/geolocator.dart';
 import 'package:location/location.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+
+import '../constants/websocketUrl.dart';
 
 class AnnouncementScreen extends StatefulWidget {
   AnnouncementScreen(this.nickname);
@@ -14,9 +14,21 @@ class AnnouncementScreen extends StatefulWidget {
 }
 
 class _AnnouncementScreenState extends State<AnnouncementScreen> {
-  final WebSocketChannel channel = WebSocketChannel.connect(Uri.parse(URL));
+  WebSocketChannel channel;
+  var location;
 
   //final TextEditingController controller = TextEditingController();
+  @override
+  void initState() {
+    super.initState();
+    channel = WebSocketChannel.connect(Uri.parse(URL));
+    location = new Location();
+    location.onLocationChanged.listen((LocationData currentLocation) {
+      LocationData pos = currentLocation;
+      channel.sink.add(
+          "${widget.nickname}: Lat: ${pos.latitude} Long: ${pos.longitude}");
+    });
+  }
 
   bool isLoading = false;
 
@@ -57,17 +69,31 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
             setState(() {
               isLoading = true;
             });
-            LocationData pos = await _determinePosition();
-            channel.sink.add(
-                "${widget.nickname}: Lat: ${pos.latitude} Long: ${pos.longitude}");
-            setState(() {
-              isLoading = false;
-            });
+
+            LocationData _location = await _determinePosition(context);
+            if (_location == null)
+              await showDialog<dynamic>(
+                  context: context,
+                  builder: (context) {
+                    return AlertDialog(
+                      title: Text("Hey ${widget.nickname}"),
+                      content: Text(
+                          "Please permit the location so we can help you !"),
+                      actions: <Widget>[
+                        FlatButton(
+                          child: Text("Ok"),
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                          },
+                        )
+                      ],
+                    );
+                  });
           }),
     );
   }
 
-  Future<LocationData> _determinePosition() async {
+  Future<LocationData> _determinePosition(BuildContext ctx) async {
     Location location = new Location();
 
     bool _serviceEnabled;
@@ -77,7 +103,25 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
     _serviceEnabled = await location.serviceEnabled();
     if (!_serviceEnabled) {
       _serviceEnabled = await location.requestService();
+      debugPrint("baby");
       if (!_serviceEnabled) {
+        await showDialog<dynamic>(
+            context: context,
+            builder: (context) {
+              return AlertDialog(
+                title: Text("Hey ${widget.nickname}"),
+                content:
+                    Text("Please permit the location so we can help you !"),
+                actions: <Widget>[
+                  FlatButton(
+                    child: Text("Ok"),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                  )
+                ],
+              );
+            });
         return null;
       }
     }
@@ -86,9 +130,42 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
     if (_permissionGranted == PermissionStatus.denied) {
       _permissionGranted = await location.requestPermission();
       if (_permissionGranted != PermissionStatus.granted) {
+        await showDialog<dynamic>(
+            context: context,
+            builder: (context) {
+              return AlertDialog(
+                title: Text("Hey ${widget.nickname}"),
+                content:
+                    Text("Please permit the location so we can help you !"),
+                actions: <Widget>[
+                  FlatButton(
+                    child: Text("Ok"),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                  )
+                ],
+              );
+            });
         return null;
       }
     }
+    /*await showDialog<dynamic>(
+                    context: context,
+                    builder: (context) {
+                      return AlertDialog(
+                        title: Text("Hey ${widget.nickname}"),
+                        content: Text("We are here to help you."),
+                        actions: <Widget>[
+                          FlatButton(
+                            child: Text("Ok"),
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                            },
+                          )
+                        ],
+                      );
+                    });*/
 
     _locationData = await location.getLocation();
     return _locationData;
